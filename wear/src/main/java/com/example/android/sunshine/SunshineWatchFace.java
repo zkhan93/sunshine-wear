@@ -31,12 +31,22 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 import android.widget.Toast;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -49,7 +59,8 @@ import java.util.concurrent.TimeUnit;
  * Digital watch face with seconds. In ambient mode, the seconds aren't displayed. On devices with
  * low-bit ambient mode, the text is drawn without anti-aliasing in ambient mode.
  */
-public class SunshineWatchFace extends CanvasWatchFaceService {
+public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleApiClient
+        .ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
     public static final String TAG = SunshineWatchFace.class.getSimpleName();
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create("sans-serif-light", Typeface.NORMAL);
@@ -60,15 +71,54 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
      * displayed in interactive mode.
      */
     private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
-
     /**
      * Handler message id for updating the time periodically in interactive mode.
      */
     private static final int MSG_UPDATE_TIME = 0;
+    private GoogleApiClient mGoogleApiClient;
 
     @Override
     public Engine onCreateEngine() {
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addApi(Wearable.API)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
+        mGoogleApiClient.connect();
         return new Engine();
+    }
+
+    @Override
+    public void onConnected(@Nullable Bundle bundle) {
+        Log.d(TAG, "google api connected");
+        signalDeviceToSendWeather();
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+        Log.d(TAG, "google api connection suspended");
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.d(TAG, "google api connection failed");
+    }
+
+    private void signalDeviceToSendWeather(){
+        PutDataMapRequest putDataMapRequest=PutDataMapRequest.create("/sunshine-weather");
+        putDataMapRequest.getDataMap().putBoolean("sendData",true);
+
+        PutDataRequest request=putDataMapRequest.asPutDataRequest();
+        Wearable.DataApi.putDataItem(mGoogleApiClient,request).setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+            @Override
+            public void onResult(@NonNull DataApi.DataItemResult dataItemResult) {
+                if(dataItemResult.getStatus().isSuccess()){
+                    Log.d(TAG,"sendData value saved");
+                }else{
+                    Log.d(TAG,"sendData save failed");
+                }
+            }
+        });
     }
 
     private static class EngineHandler extends Handler {
@@ -322,8 +372,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
                 weatherYOffset = barYOffset + barHeight + 1.3f * textGap + textBounds.height();
 
-                Log.d(TAG, String.format("%f, %f, %f, %f, %f", timeYOffset, dateYOffset, barYOffset,
-                        weatherYOffset, textGap));
+//                Log.d(TAG, String.format("%f, %f, %f, %f, %f", timeYOffset, dateYOffset, barYOffset,
+//                        weatherYOffset, textGap));
 
                 date = dateFormat.format(mCalendar.getTime());
                 weatherMax = getString(R.string.weather_string, 25);

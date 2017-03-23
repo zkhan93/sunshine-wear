@@ -109,7 +109,6 @@ public class SunshineSyncTask {
                 if (notificationsEnabled && oneDayPassedSinceLastNotification) {
                     Log.d(TAG,"notifying user");
                     NotificationUtils.notifyUserOfNewWeather(context);
-                    new SendDataToWearTask(context).execute();
                 }
 
             /* If the code reaches this point, we have successfully performed our sync */

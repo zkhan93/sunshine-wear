@@ -75,6 +75,18 @@
                 <action android:name="com.firebase.jobdispatcher.ACTION_EXECUTE"/>
             </intent-filter>
         </service>
+        <service
+            android:name=".sync.WearService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED"/>
+                <data
+                    android:host="*"
+                    android:pathPrefix="/sunshine-weather"
+                    android:scheme="wear"/>
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
