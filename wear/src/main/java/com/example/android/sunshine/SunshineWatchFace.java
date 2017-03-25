@@ -20,6 +20,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -31,22 +32,13 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import android.preference.PreferenceManager;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 import android.widget.Toast;
-
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.ResultCallback;
-import com.google.android.gms.wearable.DataApi;
-import com.google.android.gms.wearable.PutDataMapRequest;
-import com.google.android.gms.wearable.PutDataRequest;
-import com.google.android.gms.wearable.Wearable;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -59,8 +51,7 @@ import java.util.concurrent.TimeUnit;
  * Digital watch face with seconds. In ambient mode, the seconds aren't displayed. On devices with
  * low-bit ambient mode, the text is drawn without anti-aliasing in ambient mode.
  */
-public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleApiClient
-        .ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+public class SunshineWatchFace extends CanvasWatchFaceService {
     public static final String TAG = SunshineWatchFace.class.getSimpleName();
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create("sans-serif-light", Typeface.NORMAL);
@@ -75,51 +66,12 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleA
      * Handler message id for updating the time periodically in interactive mode.
      */
     private static final int MSG_UPDATE_TIME = 0;
-    private GoogleApiClient mGoogleApiClient;
 
     @Override
     public Engine onCreateEngine() {
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addApi(Wearable.API)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .build();
-        mGoogleApiClient.connect();
         return new Engine();
     }
 
-    @Override
-    public void onConnected(@Nullable Bundle bundle) {
-        Log.d(TAG, "google api connected");
-        signalDeviceToSendWeather();
-    }
-
-    @Override
-    public void onConnectionSuspended(int i) {
-        Log.d(TAG, "google api connection suspended");
-    }
-
-    @Override
-    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-        Log.d(TAG, "google api connection failed");
-    }
-
-    private void signalDeviceToSendWeather(){
-        PutDataMapRequest putDataMapRequest=PutDataMapRequest.create("/sunshine-weather");
-        putDataMapRequest.getDataMap().putBoolean("sendData",true);
-
-        PutDataRequest request=putDataMapRequest.asPutDataRequest();
-        Wearable.DataApi.putDataItem(mGoogleApiClient,request).setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
-            @Override
-            public void onResult(@NonNull DataApi.DataItemResult dataItemResult) {
-                if(dataItemResult.getStatus().isSuccess()){
-                    Log.d(TAG,"sendData value saved");
-                }else{
-                    Log.d(TAG,"sendData save failed");
-                }
-            }
-        });
-    }
 
     private static class EngineHandler extends Handler {
         private final WeakReference<SunshineWatchFace.Engine> mWeakReference;
@@ -141,7 +93,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleA
         }
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine {
+    private class Engine extends CanvasWatchFaceService.Engine implements SharedPreferences.OnSharedPreferenceChangeListener {
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
@@ -157,7 +109,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleA
             }
         };
         float mXOffset, mYOffset, timeYOffset, dateYOffset, barYOffset, weatherYOffset, barLength;
-        String timeHour, timeMin, date, weatherMax, weatherMin;
+        String timeHour, timeMin, date, maxWeatherString, minWeatherString;
+        int iconType, minWeather, maxWeather;
         float textSmallSize, textLargeSize, barHeight, textGap;
         Bitmap icon;
         /**
@@ -200,12 +153,47 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleA
 
             textSmallerFadedPaint = createTextPaint(resources.getColor(R.color.text_lightblue1));
 
-            icon = BitmapFactory.decodeResource(getResources(), R.drawable.ic_clear);
+
+            SharedPreferences spf = PreferenceManager.getDefaultSharedPreferences
+                    (getApplicationContext());
+            minWeather = spf.getInt("minWeather", -1);
+            maxWeather = spf.getInt("maxWeather", -1);
+            iconType = spf.getInt("iconType", -1);
+            icon = getIcon();
+            spf.registerOnSharedPreferenceChangeListener(Engine.this);
+        }
+
+        private Bitmap getIcon() {
+            switch (iconType) {
+                case 1:
+                    return BitmapFactory.decodeResource(getResources(), R.drawable.ic_clear);
+                default:
+                    return BitmapFactory.decodeResource(getResources(), R.drawable.ic_cloudy);
+            }
+        }
+
+        @Override
+        public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
+            switch (s) {
+                case "minWeather":
+                    minWeather = sharedPreferences.getInt(s, -1);
+                    break;
+                case "maxWeather":
+                    maxWeather = sharedPreferences.getInt(s, -1);
+                    break;
+                case "iconType":
+                    iconType = sharedPreferences.getInt(s, -1);
+                    icon = getIcon();
+                    break;
+            }
+            Log.d(TAG, String.format(Locale.ENGLISH, "%d %d %d", maxWeatherString, minWeatherString, iconType));
         }
 
         @Override
         public void onDestroy() {
             mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
+            PreferenceManager.getDefaultSharedPreferences(getApplicationContext())
+                    .unregisterOnSharedPreferenceChangeListener(this);
             super.onDestroy();
         }
 
@@ -376,8 +364,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleA
 //                        weatherYOffset, textGap));
 
                 date = dateFormat.format(mCalendar.getTime());
-                weatherMax = getString(R.string.weather_string, 25);
-                weatherMin = getString(R.string.weather_string, 16);
+                maxWeatherString = getString(R.string.weather_string, maxWeather);
+                minWeatherString = getString(R.string.weather_string, minWeather);
 
                 canvas.drawText(date.toUpperCase(), bounds.centerX() - textSmallerFadedPaint.measureText(date)
                                 / 2,
@@ -387,17 +375,17 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements GoogleA
                                 barLength / 2, barYOffset,
                         textSmallFadedPaint);
 
-                canvas.drawText(weatherMax, bounds.centerX() - textSmallPaint.measureText
-                                (weatherMax) / 2,
+                canvas.drawText(maxWeatherString, bounds.centerX() - textSmallPaint.measureText
+                                (maxWeatherString) / 2,
                         weatherYOffset,
                         textSmallPaint);
-                canvas.drawText(weatherMin, bounds.centerX() + textSmallPaint.measureText
-                                (weatherMax) / 2 + 0.5f * textGap,
+                canvas.drawText(minWeatherString, bounds.centerX() + textSmallPaint.measureText
+                                (maxWeatherString) / 2 + 0.5f * textGap,
                         weatherYOffset,
                         textSmallFadedPaint);
 
                 canvas.drawBitmap(icon, bounds.centerX() - textSmallPaint.measureText
-                        (weatherMax) / 2 - 0.5f * textGap - icon.getWidth(), barYOffset +
+                        (maxWeatherString) / 2 - 0.5f * textGap - icon.getWidth(), barYOffset +
                         barHeight + 0.5f * textGap, textSmallPaint);
             }
         }

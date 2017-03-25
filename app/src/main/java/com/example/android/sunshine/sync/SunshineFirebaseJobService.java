@@ -57,6 +57,7 @@ public class SunshineFirebaseJobService extends JobService {
         };
 
         mFetchWeatherTask.execute();
+        new SendDataToWearTask(this).execute();
         return true;
     }
 

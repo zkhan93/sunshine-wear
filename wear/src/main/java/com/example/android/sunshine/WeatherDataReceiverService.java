@@ -1,5 +1,7 @@
 package com.example.android.sunshine;
 
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 import android.util.Log;
 
 import com.google.android.gms.wearable.DataEvent;
@@ -17,13 +19,19 @@ public class WeatherDataReceiverService extends WearableListenerService {
 
     @Override
     public void onDataChanged(DataEventBuffer dataEventBuffer) {
+        Log.d(TAG, "wear:on Data Changes");
+        SharedPreferences spf = PreferenceManager.getDefaultSharedPreferences
+                (getApplicationContext());
         for (DataEvent de : dataEventBuffer) {
             if (de.getType() == DataEvent.TYPE_CHANGED) {
                 DataMap dataMap = DataMapItem.fromDataItem(de.getDataItem()).getDataMap();
                 String path = de.getDataItem().getUri().getPath();
                 if (path.equals("/sunshine-weather")) {
                     int minWeather = dataMap.getInt("minWeather", -1);
-                    Log.d(TAG, "minWeather:" + minWeather);
+                    int maxWeather = dataMap.getInt("maxWeather", -1);
+                    int icon = dataMap.getInt("iconType", -1);
+                    spf.edit().putInt("minWeather", minWeather)
+                            .putInt("maxWeather", maxWeather).putInt("iconType", icon).apply();
                     break;
                 }
             }

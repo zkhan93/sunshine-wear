@@ -34,6 +34,7 @@ import android.widget.ProgressBar;
 
 import com.example.android.sunshine.data.SunshinePreferences;
 import com.example.android.sunshine.data.WeatherContract;
+import com.example.android.sunshine.sync.SendDataToWearTask;
 import com.example.android.sunshine.sync.SunshineSyncUtils;
 
 public class MainActivity extends AppCompatActivity implements
@@ -153,7 +154,12 @@ public class MainActivity extends AppCompatActivity implements
         getSupportLoaderManager().initLoader(ID_FORECAST_LOADER, null, this);
 
         SunshineSyncUtils.initialize(this);
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        new SendDataToWearTask(this).execute();
     }
 
     /**
